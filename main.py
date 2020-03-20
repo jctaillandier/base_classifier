@@ -16,11 +16,6 @@ CPU_DEVICE = torch.device("cpu")
 GET_VALUE = lambda x: x.to(CPU_DEVICE).data.numpy().reshape(-1)[0]
 print(f"\n *** \n Currently running on {device}\n *** \n")
 
-exp_name = f"classifier"
-path_to_exp = utils.check_dir_path(f'./experiments/{exp_name}/')
-os.mkdir(path_to_exp)
-model_saved = path_to_exp+'models_data/'
-os.mkdir(model_saved)
 
 class My_dataLoader:
     def __init__(self, batch_size : int, df_data: pd.DataFrame, df_label:pd.DataFrame):
@@ -32,22 +27,18 @@ class My_dataLoader:
             :label_path: csv containing labels. line by line equivalent to data_path file
         '''
         self.batch_size = batch_size
-        self.test_batch_size = batch_size
         total_length = df_data.shape[0]
         self.train_size = int(total_length * 0.8)
         self.valid_size = int(total_length * 0.9)
-
-        self.df_data = df_data
-        self.df_label = df_label
          
-        self.trdata = torch.tensor(self.df_data.values[:self.train_size,:])
-        self.trlabels = torch.tensor(self.df_label.values[:self.train_size]) # also has too be 2d
+        self.trdata = torch.tensor(df_data.values[:self.train_size,:])
+        self.trlabels = torch.tensor(df_label.values[:self.train_size]) # also has too be 2d
 
-        self.vadata = torch.tensor(self.df_data.values[self.train_size:self.valid_size,:])
-        self.valabels = torch.tensor(self.df_label.values[self.train_size:self.valid_size]) # also has too be 2d  
+        self.vadata = torch.tensor(df_data.values[self.train_size:self.valid_size,:])
+        self.valabels = torch.tensor(df_label.values[self.train_size:self.valid_size]) # also has too be 2d  
 
-        self.tedata = torch.tensor(self.df_data.values[self.valid_size:,:]) # where data is 2d [D_train_size x features]
-        self.telabels = torch.tensor(self.df_label.values[self.valid_size:]) # also has too be 2d  
+        self.tedata = torch.tensor(df_data.values[self.valid_size:,:]) # where data is 2d [D_train_size x features]
+        self.telabels = torch.tensor(df_label.values[self.valid_size:]) # also has too be 2d  
 
         self.train_dataset = torch.utils.data.TensorDataset(self.trdata, self.trlabels)
         self.valid_dataset = torch.utils.data.TensorDataset(self.vadata, self.valabels)
@@ -56,21 +47,24 @@ class My_dataLoader:
 
         self.train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
-            batch_size=self.batch_size,
+            batch_size=args.batch_size,
             num_workers=1,
-            pin_memory=False
+            pin_memory=False,
+            shuffle=True
         )
         self.valid_loader = torch.utils.data.DataLoader(
             self.valid_dataset,
-            batch_size=self.batch_size,
+            batch_size=args.batch_size,
             num_workers=1,
-            pin_memory=False
+            pin_memory=False,
+            shuffle=True
         )
         self.test_loader = torch.utils.data.DataLoader(
             self.test_dataset,
-            batch_size=self.batch_size,
+            batch_size=args.test_batch_size,
             num_workers=1,
-            pin_memory=False
+            pin_memory=False,
+            shuffle=True
         )
 
 class BlackBox(nn.Module):
@@ -94,7 +88,7 @@ class BlackBox(nn.Module):
 def train(model: torch.nn.Module, train_loader:torch.utils.data.DataLoader, optimizer:torch.optim, loss_fn) -> int:
     model.train()
     train_loss = []
-    for batch_idx, (inputs, target) in enumerate(dataloader.train_loader):
+    for batch_idx, (inputs, target) in enumerate(train_loader.train_loader):
         inputs, target = inputs.to(device), target.to(device)        
         optimizer.zero_grad()
         output = model(inputs.float())
@@ -108,7 +102,7 @@ def train(model: torch.nn.Module, train_loader:torch.utils.data.DataLoader, opti
     return sum(train_loss)/len(train_loss)
 
 
-def test(model: torch.nn.Module, test_loss_fn:torch.optim, dataloader: My_dataLoader) -> int:
+def valid(model: torch.nn.Module, test_loss_fn, dataloader: My_dataLoader, epoch:int) -> int:
     '''
         Does the test loop and if last epoch, decodes data, generates new data, returns and saves both 
         under ./experiments/<experiment_name>/
@@ -126,9 +120,8 @@ def test(model: torch.nn.Module, test_loss_fn:torch.optim, dataloader: My_dataLo
     test_loss = 0
     correct = 0
     test_size = 0
-    loss = []
     with torch.no_grad():
-        for inputs, target in dataloader.test_loader:
+        for inputs, target in dataloader.valid_loader:
             inputs, target = inputs.to(device), target.to(device)
             output = model(inputs.float())
             test_size += len(inputs)
@@ -136,16 +129,20 @@ def test(model: torch.nn.Module, test_loss_fn:torch.optim, dataloader: My_dataLo
             test_loss += test_loss_fn(output, target).item() 
             pred = output.max(1, keepdim=True)[1] 
             correct += pred.eq(target.view_as(pred)).sum().item()
+    
+    # At this point `test_size` == bs * len(valid_loader) == rows passed in this loop ^
+    #  Hence test_loss value will be an average over each data point
     test_loss /= test_size
     accuracy = correct / test_size
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        test_loss, correct, test_size,
+    
+    print('\nTest set epoch {}: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        epoch, test_loss, correct, test_size,
         100. * accuracy))
     
     return test_loss, accuracy
 
 
-def train_model(model, dataloader, loss_fn, test_loss_fn, num_epochs):
+def train_model(model, dataloader, loss_fn, test_loss_fn, optimizer, num_epochs):
         '''
             Takes care of all model training, testing and generation of data
             Generates data every epoch but only saves on file if loss is lowest so far.
@@ -163,24 +160,26 @@ def train_model(model, dataloader, loss_fn, test_loss_fn, num_epochs):
             ave_train_loss.append(batch_ave_tr_loss.cpu().numpy().item())
 
         #     # Check test set metrics (+ generate data if last epoch )
-            loss, accuracy = test(model, test_loss_fn, dataloader)
+            loss, accuracy = valid(model, test_loss_fn, dataloader, epoch)
             
-        #     if loss < lowest_test_loss:
-        #         if os.path.isfile(path_to_exp+f"lowest-test-loss-model_ep{lowest_loss_ep}.pth"):
-        #             os.remove(path_to_exp+f"lowest-test-loss-model_ep{lowest_loss_ep}.pth")
-        #         lowest_test_loss = loss
-        #         fm = open(path_to_exp+f"lowest-test-loss-model_ep{epoch}.pth", "wb")
-        #         torch.save(model.state_dict(), fm)
-        #         fm.close()
-        #         lowest_loss_ep = epoch
+            #saving model and epoch if lowest loss value so far
+            if loss < lowest_test_loss:
+                if os.path.isfile(path_to_exp+f"lowest-test-loss-model_ep{lowest_loss_ep}.pth"):
+                    os.remove(path_to_exp+f"lowest-test-loss-model_ep{lowest_loss_ep}.pth")
+                lowest_test_loss = loss
+                fm = open(path_to_exp+f"lowest-test-loss-model_ep{epoch}.pth", "wb")
+                torch.save(model.state_dict(), fm)
+                fm.close()
+                lowest_loss_ep = epoch
             test_accuracy.append(accuracy)
             test_losses.append(loss)
-            print(f"Test loss for epoch {epoch+1}: {loss:.2f}")
+
         fm = open(path_to_exp+f"final-model_{num_epochs}ep.pth", "wb")
         torch.save(model.state_dict(), fm)
         end = time.time()
 
         print(f"Total time to train: {(end-start)/60:.2f} minutes.")
+        return test_losses, test_accuracy
 
 def split_data_labels(full_data:pd.DataFrame, column_label:str)-> (pd.DataFrame, pd.DataFrame):
     '''
@@ -205,36 +204,69 @@ def split_data_labels(full_data:pd.DataFrame, column_label:str)-> (pd.DataFrame,
 
     return data, labels_df
 
-if __name__ == "__main__":
+def gen_loss_graphs(losses, accuracies):
+    a = f'adult_{args.epochs}ep'
+    x_axis = np.arange(1,args.epochs+1)
+    plt.figure()
+    plt.subplot(1,2,1)
+    plt.plot(x_axis, losses)
+    plt.xlabel("Epochs")
+    plt.ylabel("L1 Loss")
+    plt.title("Test Loss")
+
+    plt.subplot(1,2,2)
+    plt.plot(x_axis, accuracies)
+    plt.xlabel("Epochs")
+    plt.ylabel("L1 Loss")
+    plt.title("Test Accuracies")
+    plt.savefig(path_to_exp+f"{args.learning_rate}lr_{args.batch_size}.png")
+
+def main():
     # Import data at ../GeneralDatasets/Csv/Adult_NotNA.csv
-    data = pd.read_csv('../GeneralDatasets/Csv/Adult_NotNA.csv')
-    data, labels = split_data_labels(data, 'income')
+    data = pd.read_csv(f'../GeneralDatasets/Csv/{args.input_dataset}.csv')
 
-    # Encode Data with dummy variables
-    data.to_csv(path_to_exp+'junk_raw_data.csv', index=False)
-    df = pd.read_csv(path_to_exp+'junk_raw_data.csv')
-    data_encoder = d.Encoder(df)
-    if os.path.exists(path_to_exp+'./parameters.prm'):
-        data_encoder.load_parameters(path_to_exp, 'parameters.prm')
-        data_encoder.transform()
+    if 'disp_impact'  not in args.input_dataset:
+        # Encode Data with dummy variables
+        data.to_csv(path_to_exp+'junk_raw_data.csv', index=False)
+        df = pd.read_csv(path_to_exp+'junk_raw_data.csv')
+        data_encoder = d.Encoder(df)
+
+        data, labels = split_data_labels(data_encoder.df, args.target)
+
+        if os.path.exists(path_to_exp+'parameters.prm'):
+            data_encoder.load_parameters(path_to_exp, 'parameters.prm')
+            data_encoder.transform()
+        else:
+            data_encoder.fit_transform()
+            data_encoder.save_parameters(path_to_exp)
+
+        encoded_data = data_encoder.df
+
+    #Work with disp_impact input, already encoded
     else:
-        data_encoder.fit_transform()
-        data_encoder.save_parameters(path_to_exp)
-    encoded_data = data_encoder.df
-    print("Data Encoded")
+        data, labels = split_data_labels(data, args.target)
+        encoded_data = data
 
-    dataloader = My_dataLoader(batch_size=1024, df_data=encoded_data, df_label=labels)
+    print("Data Encoded")
+    # print(f"Headers: {encoded_data.columns}")
+    dataloader = My_dataLoader(batch_size=args.batch_size, df_data=encoded_data, df_label=labels)
     print(f"Dataloader built")
 
     loss_fn = torch.nn.CrossEntropyLoss()
     test_loss_fn = nn.CrossEntropyLoss(reduction='sum')   
-    learning_rate = 1e-4
-    num_epochs = 10
-    weight_decay = 0
+    learning_rate = args.learning_rate
+    num_epochs = args.epochs
+    weight_decay = args.weight_decay
+
     model = BlackBox(encoded_data.shape[1])
     print(f"Model Built")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
  
-    train_model(model, dataloader, loss_fn, test_loss_fn, num_epochs)
+    losses, accuracies = train_model(model, dataloader, loss_fn, test_loss_fn, optimizer, num_epochs)
+    os.remove(path_to_exp+'junk_raw_data.csv')
 
-os.remove(path_to_exp+'junk_raw_data.csv')
+    gen_loss_graphs(losses, accuracies)
+
+parser = argparse.ArgumentParser()
+args, path_to_exp = utils.parse_arguments(parser)
+main()
