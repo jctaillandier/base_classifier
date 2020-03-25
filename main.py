@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from torch.utils import data as td
 from torch.autograd import Variable
 import datasets as d
+import torch.nn.functional as F
 import utilities as utils
 
 
@@ -30,7 +31,7 @@ class My_dataLoader:
         total_length = df_data.shape[0]
         self.train_size = int(total_length * 0.8)
         self.valid_size = int(total_length * 0.9)
-         
+        df_data = df_data.sample(frac=1, random_state=2).reset_index(drop=True)
         self.trdata = torch.tensor(df_data.values[:self.train_size,:])
         self.trlabels = torch.tensor(df_label.values[:self.train_size]) # also has too be 2d
 
@@ -68,21 +69,41 @@ class My_dataLoader:
         )
 
 class BlackBox(nn.Module):
-    def __init__(self, in_dim: int):
+    def __init__(self, in_dim: int, hidden=254,  dropout=0.5):
         super(BlackBox, self).__init__()
-        self.classifier = nn.Sequential(
-            nn.Linear(in_dim, in_dim),
-            nn.BatchNorm1d(in_dim),
-            nn.LeakyReLU(),
-            nn.Linear(in_dim,36),
-            nn.BatchNorm1d(36),
-            nn.LeakyReLU(), 
-            nn.Linear(36,2),
-            nn.Softmax()
-        )
+        self.drop1 = torch.nn.Dropout(0.2)
+        self.drop2 = torch.nn.Dropout(dropout)
+        self.l1 = nn.Linear(in_dim, hidden)
+        self.bn1 = nn.BatchNorm1d(hidden)
+
+        self.l2 = nn.Linear(hidden,hidden//2)
+        self.bn2 = nn.BatchNorm1d(hidden//2)
+
+        self.l3 = nn.Linear(hidden//2, hidden//4)
+        self.bn3 = nn.BatchNorm1d(hidden//4)
+
+        self.l4 = nn.Linear(hidden//4, hidden//8)
+        self.bn4 = nn.BatchNorm1d(hidden//8)
+        
+        self.out = nn.Linear(hidden//8, 2)
+        # self.sm = nn.Softmax()
+        
 
     def forward(self, xin):
-        x = self.classifier(xin)        
+        x = F.leaky_relu(self.l1(xin))
+        x = self.drop1(self.bn1(x)) 
+
+        x = F.leaky_relu(self.l2(x))
+        x = self.drop1(self.bn2(x))    
+        
+        x = F.leaky_relu(self.l3(x))
+        x = self.drop2(self.bn3(x))    
+        
+        x = F.leaky_relu(self.l4(x))
+        x = self.drop2(self.bn4(x))      
+
+
+        x = self.out(x)
         return x
     
 def train(model: torch.nn.Module, train_loader:torch.utils.data.DataLoader, optimizer:torch.optim, loss_fn) -> int:
@@ -171,9 +192,12 @@ def train_model(model, dataloader, loss_fn, test_loss_fn, optimizer, num_epochs)
                 torch.save(model.state_dict(), fm)
                 fm.close()
                 lowest_loss_ep = epoch
-            test_accuracy.append(accuracy)
+            test_accuracy.append(accuracy*100)
             test_losses.append(loss)
-
+        with open(path_to_exp+f"metadata.txt", 'w+') as f:
+            f.write(f"loss: {test_losses} \n \n")
+            f.write(f"accuracies: {test_accuracy} \n \n")
+            
         fm = open(path_to_exp+f"final-model_{num_epochs}ep.pth", "wb")
         torch.save(model.state_dict(), fm)
         end = time.time()
@@ -205,7 +229,6 @@ def split_data_labels(full_data:pd.DataFrame, column_label:str)-> (pd.DataFrame,
     return data, labels_df
 
 def gen_loss_graphs(losses, accuracies):
-    a = f'adult_{args.epochs}ep'
     x_axis = np.arange(1,args.epochs+1)
     plt.figure()
     plt.subplot(1,2,1)
@@ -258,7 +281,7 @@ def main():
     num_epochs = args.epochs
     weight_decay = args.weight_decay
 
-    model = BlackBox(encoded_data.shape[1])
+    model = BlackBox(encoded_data.shape[1]).to(device)
     print(f"Model Built")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
  
