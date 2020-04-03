@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
 
 # spot check machine learning algorithms on the adult imbalanced dataset
 from numpy import mean
@@ -43,13 +38,13 @@ def load_dataset(full_path):
 # evaluate a model
 def evaluate_model(X, y, model):
     # Train test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
     
     # define evaluation procedure
-    cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1)
+    cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
     # evaluate model
-    model.fit(X_train, y_train)
-    scores = cross_val_score(model, X_test, y_test, scoring='accuracy', cv=cv, n_jobs=-1)
+#     model.fit(X_train, y_train)
+    scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=1)
     
     return scores
 
@@ -96,26 +91,25 @@ for i in range(len(models)):
     scores = evaluate_model(X, y, pipeline)
     results.append(scores)
     # summarize performance
-    print_text = '>%s %.3f (%.3f)' % (names[i], mean(scores), std(scores))
+    print_text = "{},{},{}".format(names[i], mean(scores), std(scores))
     total_texts.append(print_text)
     print(print_text)
 
 # plot the results
 pyplot.boxplot(results, labels=names, showmeans=True)
 pyplot.savefig(f"./experiments/metadata_{file}.png")
+
 # Write the results to file
+total_score = 0
+for result in total_texts:
+    score = result.split(',')[1]
+    total_score = total_score + float(score)
+average = total_score/len(total_texts)
 
-
-# In[ ]:
 
 
 with open(f"./experiments/metadata_{file}.txt", 'w+') as f:
             f.write(f"Results: {results} \n \n")
-            f.write(f"TEst Output: {total_texts} \n \n")
-
-
-# In[ ]:
-
-
-
+            f.write(f"Test Output: {total_texts}\n")
+            f.write(f"Classifiers average:{average}")
 
