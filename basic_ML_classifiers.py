@@ -43,8 +43,8 @@ def evaluate_model(X, y, model):
     # define evaluation procedure
     cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1)
     # evaluate model
-    model.fit(X_train, y_train)
-    scores = cross_val_score(model, X_test, y_test, scoring='accuracy', cv=cv, n_jobs=2)
+    # model.fit(X_train, y_train)
+    scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=2)
     
     return scores
 
