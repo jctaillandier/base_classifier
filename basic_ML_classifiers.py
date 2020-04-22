@@ -1,3 +1,8 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
 
 # spot check machine learning algorithms on the adult imbalanced dataset
 from numpy import mean
@@ -38,13 +43,14 @@ def load_dataset(full_path):
 # evaluate a model
 def evaluate_model(X, y, model):
     # Train test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
     
     # define evaluation procedure
     cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1)
     # evaluate model
-    # model.fit(X_train, y_train)
-    scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=2)
+#     model.fit(X_train, y_train)
+    # k-1 pour train et k2 pour test
+    scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=3)
     
     return scores
 
@@ -69,9 +75,9 @@ def get_models():
     return models, names
 
 
-file = 'disp_impact_decoded_sex'
+file = 'adult_sanitized_0.9875'
 # define the location of the dataset
-full_path = f'../GeneralDatasets/sex_last/{file}.csv'
+full_path = f'../gansan_assaini/9875/{file}.csv'
 # load the dataset
 X, y, cat_ix, num_ix = load_dataset(full_path)
 # define models
@@ -79,6 +85,7 @@ models, names = get_models()
 results = list()
 total_texts = []
 # evaluate each model
+
 for i in range(len(models)):
     # define steps
     steps = [('c',OneHotEncoder(handle_unknown='ignore'),cat_ix), ('n',MinMaxScaler(),num_ix)]
@@ -86,11 +93,12 @@ for i in range(len(models)):
     ct = ColumnTransformer(steps)
     # wrap the model i a pipeline
     pipeline = Pipeline(steps=[('t',ct),('m',models[i])])
+
     # evaluate the model and store results
     scores = evaluate_model(X, y, pipeline)
     results.append(scores)
     # summarize performance
-    print_text = '>%s %.3f (%.3f)' % (names[i], mean(scores), std(scores))
+    print_text = "{},{},{}".format(names[i], mean(scores), std(scores))
     total_texts.append(print_text)
     print(print_text)
 
@@ -99,18 +107,28 @@ pyplot.boxplot(results, labels=names, showmeans=True)
 pyplot.savefig(f"./experiments/metadata_{file}.png")
 # Write the results to file
 
-sum_scores=0
-for i in total_texts:
-    print(i)
-    num = i.split(' ')[1]
-    sum_scores = sum_scores + float(num)
 
-ave_score = sum_scores/len(total_texts)
+# In[ ]:
+
+
+total_score = 0
+for result in total_texts:
+    score = result.split(',')[1]
+    total_score = total_score + float(score)
+average = total_score/len(total_texts)
+
+
+# In[ ]:
+
 
 with open(f"./experiments/metadata_{file}.txt", 'w+') as f:
-            f.write(f"Results: {results} \n")
+            f.write(f"Results: {results} \n \n")
             f.write(f"Test Output: {total_texts}\n")
-            f.write(f"Average Scores: {ave_score}")
+            f.write(f"Classifiers average:{average}")
+
+
+# In[ ]:
+
 
 
 
