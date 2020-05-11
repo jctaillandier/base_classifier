@@ -1,4 +1,3 @@
-
 # spot check machine learning algorithms on the adult imbalanced dataset
 from numpy import mean
 from numpy import std
@@ -21,14 +20,17 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-def load_dataset(full_path):
+
+
+
+def load_dataset( full_path):
     # load the dataset as a numpy array
     # dataframe = read_csv(full_path, header=None, na_values='?')
-    dataframe = read_csv(full_path,header=None,na_values='?')
+    dataframe = read_csv(full_path,na_values='?')
     # drop rows with missing
     dataframe = dataframe.dropna()
     # split into inputs and outputs
-    last_ix = len(dataframe.columns) - 1
+    last_ix = 'sex'
     X, y = dataframe.drop(last_ix, axis=1), dataframe[last_ix]
 
     # select categorical and numerical features
@@ -48,19 +50,22 @@ def load_dataset(full_path):
 
 
 # evaluate a model
-def evaluate_model(X, y, model, X_not_san, y_not_san, kfold=False):
-    if kfold==False:
+def evaluate_model( X, y, model, kfold='false'):
+    if kfold.lower() == 'false':
+        perc=0.15
+        print(f"Running Train-Test split with {perc}% test set.")
         # Train test split
-        X_train, X_test, y_train, y_test = train_test_split( X,y, test_size=0.15, random_state=42)
-        X_train2, X_test2, y_train2, y_test2 = train_test_split(X_not_san, y_not_san, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=perc, random_state=42)
 
         model.fit(X_train, y_train)
         preds = model.predict(X_test)
         score = accuracy_score(y_test,preds)
     
     else:
+        k = 10
+        print(f"Running {k}k-fold cross validation training.")
         # define evaluation procedure
-        cv = RepeatedStratifiedKFold(n_splits=7, n_repeats=1, random_state=1)
+        cv = RepeatedStratifiedKFold(n_splits=k, n_repeats=1, random_state=1)
         
         # evaluate model
         score = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=2)
@@ -71,36 +76,26 @@ def evaluate_model(X, y, model, X_not_san, y_not_san, kfold=False):
 def get_models():
     models, names = list(), list()
     # CART
-    models.append(DecisionTreeClassifier())
-    names.append('CART')
+    # models.append(DecisionTreeClassifier())
+    # names.append('CART')
     # SVM
-    # models.append(SVC(gamma='scale'))
-    # names.append('SVM')
+    models.append(SVC(gamma='scale'))
+    names.append('SVM')
 #     # Bagging
-    # models.append(BaggingClassifier(n_estimators=100))
-    # names.append('BAG')
-#     # RF
-#     models.append(RandomForestClassifier(n_estimators=100))
-#     names.append('RF')
-#     # GBM
-    # models.append(GradientBoostingClassifier(n_estimators=100))
-    # names.append('GBM')
+    models.append(BaggingClassifier(n_estimators=100))
+    names.append('BAG')
+    # RF
+    models.append(RandomForestClassifier(n_estimators=100))
+    names.append('RF')
+# #     # GBM
+    models.append(GradientBoostingClassifier(n_estimators=100))
+    names.append('GBM')
     return models, names
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument('-k','--kfold', type=bool, default=False, help='Set to true to run 10k fold cross validation. Otherwise 15% test set regular training', required=True)
-# args = parser.parse_args()
-
-
-# file = 'train_sex'
-file_name = '0.2alpha_1e6lr_sex'
-# full_path = f'../GeneralDatasets/Csv/{file_name}.csv'
-full_path = f'../focus_data/recons_data/{file_name}.csv'
+file = 'last_ep_data_clean'
+full_path = f'../focus_data/recons_data/{file}.csv'
+# full_path = f"../GeneralDatasets/Csv/disp_impact_decoded2222.csv"
 X, y, cat_ix, num_ix = load_dataset(full_path)
-
-original_data = f"../GeneralDatasets/sex_last/Adult_NotNA__sex.csv"
-# original_data = f"../focus_data/2.csv"
-X_not_san, y_not_san, cat_ix_not_san, num_ix_not_san = load_dataset(original_data)
 
 # define models
 models, names = get_models()
@@ -117,19 +112,13 @@ for i in range(len(models)):
     pipeline = Pipeline(steps=[('t',ct),('m',models[i])])
 
     # evaluate the model and store results
-    scores = evaluate_model(X,y, pipeline,X_not_san, y_not_san)
+    scores = evaluate_model(X,y, pipeline)
     results.append(scores)
     # summarize performance
-    print_text = "{},{},{}".format(names[i], mean(scores), std(scores))
+    print_text = "{},{:.2f},{:.4f}".format(names[i], mean(scores), std(scores))
+    
     total_texts.append(print_text)
-    print(f"\n Input file: {file_name}")
     print(print_text)
-
-# plot the results
-# pyplot.boxplot(results, labels=names, showmeans=True)
-# pyplot.savefig(f"./experiments/metadata_{file_name}.png")
-# Write the results to file
-
 
 total_score = 0
 for result in total_texts:
@@ -137,9 +126,10 @@ for result in total_texts:
     total_score = total_score + float(score)
 average = total_score/len(total_texts)
 
+print(f"Average of {i+1} classifiers: {average}")
 
-
-# with open(f"./experiments/train-{file_name}_test-{str(original_data).split('/')[-1][:-4]}txt", 'w+') as f:
-#             f.write(f"Results: {results} \n \n")
-#             f.write(f"Test Output: {total_texts}\n")
-#             f.write(f"Classifiers average:{average}")
+    # with open(f"{path}{file_name1}.txt", 'w+') as f:
+    #             f.write(f"Input file: {file_name1}")
+    #             f.write(f"Results: {results} \n \n")
+    #             f.write(f"Test Output: {total_texts}\n")
+    #             f.write(f"Classifiers average:{average}")
