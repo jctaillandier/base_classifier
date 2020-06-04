@@ -19,7 +19,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import BaggingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-
+from sklearn.neural_network import MLPClassifier
 
 
 
@@ -85,16 +85,16 @@ def get_models():
     models.append(BaggingClassifier(n_estimators=100))
     names.append('BAG')
     # RF
-    models.append(RandomForestClassifier(n_estimators=100))
-    names.append('RF')
+    models.append(MLPClassifier(max_iter=100))
+    names.append('MLP')
 # #     # GBM
     models.append(GradientBoostingClassifier(n_estimators=100))
     names.append('GBM')
     return models, names
 
-file = 'last_ep_data_clean'
-full_path = f'../focus_data/recons_data/{file}.csv'
-# full_path = f"../GeneralDatasets/Csv/disp_impact_decoded2222.csv"
+filen = 'laftr_test_og-attr'
+# full_path = f'../focus_data/recons_data/{filen}.csv'
+full_path = f"../GeneralDatasets/sanitized_output/{filen}.csv"
 X, y, cat_ix, num_ix = load_dataset(full_path)
 
 # define models
