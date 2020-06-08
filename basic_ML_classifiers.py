@@ -3,7 +3,6 @@ from numpy import mean
 from numpy import std
 import pdb, argparse
 import pandas as pd
-from pandas import read_csv
 from matplotlib import pyplot
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
@@ -26,7 +25,7 @@ from sklearn.neural_network import MLPClassifier
 def load_dataset( full_path):
     # load the dataset as a numpy array
     # dataframe = read_csv(full_path, header=None, na_values='?')
-    dataframe = read_csv(full_path,na_values='?')
+    dataframe = pd.read_csv(full_path,na_values='?')
     # drop rows with missing
     dataframe = dataframe.dropna()
     # split into inputs and outputs
@@ -46,7 +45,7 @@ def load_dataset( full_path):
     # label encode the target variable to have the classes 0 and 1
 #     y = pd.to_numeric(y.values[:,0])
     # y = LabelEncoder().fit_transform(y)
-    return X.values, y.values, c_ix, n_ix
+    return X.values, y.values, c_ix, n_ix, dataframe
 
 
 # evaluate a model
@@ -58,6 +57,8 @@ def evaluate_model( X, y, model, kfold='false'):
         X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=perc, random_state=42)
 
         model.fit(X_train, y_train)
+        # if type(model) == ColumnTransformer:
+        #     model = model['m']
         preds = model.predict(X_test)
         score = accuracy_score(y_test,preds)
     
@@ -76,26 +77,27 @@ def evaluate_model( X, y, model, kfold='false'):
 def get_models():
     models, names = list(), list()
     # CART
-    # models.append(DecisionTreeClassifier())
-    # names.append('CART')
+    models.append(DecisionTreeClassifier())
+    names.append('CART')
     # SVM
-    models.append(SVC(gamma='scale'))
-    names.append('SVM')
+    # models.append(SVC(gamma='scale'))
+    # names.append('SVM')
 #     # Bagging
-    models.append(BaggingClassifier(n_estimators=100))
-    names.append('BAG')
-    # RF
-    models.append(MLPClassifier(max_iter=100))
-    names.append('MLP')
-# #     # GBM
-    models.append(GradientBoostingClassifier(n_estimators=100))
-    names.append('GBM')
+#     models.append(BaggingClassifier(n_estimators=100))
+#     names.append('BAG')
+#     # RF
+#     models.append(MLPClassifier(max_iter=500))
+#     names.append('MLP')
+# # #     # GBM
+#     models.append(GradientBoostingClassifier(n_estimators=100))
+#     names.append('GBM')
     return models, names
 
-filen = 'laftr_test_og-attr'
-# full_path = f'../focus_data/recons_data/{filen}.csv'
+# filen = 'adult_sanitized_0.2_sex'
+# full_path = f'../focus_data/gansanitized/{filen}.csv'
+filen = 'disp_impact_remover_1.0'
 full_path = f"../GeneralDatasets/sanitized_output/{filen}.csv"
-X, y, cat_ix, num_ix = load_dataset(full_path)
+X, y, cat_ix, num_ix, dataframe = load_dataset(full_path)
 
 # define models
 models, names = get_models()
@@ -112,7 +114,17 @@ for i in range(len(models)):
     pipeline = Pipeline(steps=[('t',ct),('m',models[i])])
 
     # evaluate the model and store results
-    scores = evaluate_model(X,y, pipeline)
+    is_encoded = False
+    for col in dataframe.columns:
+        if "=" in col:
+            is_encoded = True
+
+    if is_encoded == False:
+        print("Not encoded")
+        scores = evaluate_model(X,y, pipeline)
+    else:
+        scores = evaluate_model(X,y, models[i])
+        
     results.append(scores)
     # summarize performance
     print_text = "{},{:.2f},{:.4f}".format(names[i], mean(scores), std(scores))
