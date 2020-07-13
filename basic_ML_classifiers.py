@@ -30,6 +30,7 @@ def load_dataset( full_path):
     dataframe = dataframe.dropna()
     # split into inputs and outputs
     last_ix = 'sex'
+    dataframe = dataframe.drop('income', axis=1)
     X, y = dataframe.drop(last_ix, axis=1), dataframe[last_ix]
 
     # select categorical and numerical features
@@ -42,9 +43,7 @@ def load_dataset( full_path):
             c_ix.append(i)
         elif v in num_ix:
             n_ix.append(i)
-    # label encode the target variable to have the classes 0 and 1
-#     y = pd.to_numeric(y.values[:,0])
-    # y = LabelEncoder().fit_transform(y)
+
     return X.values, y.values, c_ix, n_ix, dataframe
 
 
@@ -93,10 +92,11 @@ def get_models():
 #     names.append('GBM')
     return models, names
 
-# filen = 'adult_sanitized_0.2_sex'
-# full_path = f'../focus_data/gansanitized/{filen}.csv'
-filen = 'disp_impact_remover_1.0'
-full_path = f"../GeneralDatasets/sanitized_output/{filen}.csv"
+filen = 'adult_sanitized_0.2_sex'
+full_path = f'../focus_data/gansanitized/{filen}.csv'
+
+full_path = f"/home/jc/Desktop/udem_H20/thesis_research/fairness_evaluation/fairness_calculation_data/disp_impact_reduced.csv"
+
 X, y, cat_ix, num_ix, dataframe = load_dataset(full_path)
 
 # define models
