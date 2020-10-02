@@ -25,14 +25,13 @@ from sklearn.neural_network import MLPClassifier
 def load_dataset( full_path):
     # load the dataset as a numpy array
     # dataframe = read_csv(full_path, header=None, na_values='?')
-    dataframe = pd.read_csv(full_path,na_values='?')
+    dataframe = pd.read_csv(full_path)
     # drop rows with missing
     dataframe = dataframe.dropna()
     # split into inputs and outputs
-    last_ix = 'sex'
-    dataframe = dataframe.drop('income', axis=1)
+    last_ix = 'two_year_recid'
+    # dataframe = dataframe.drop('race', axis=1)
     X, y = dataframe.drop(last_ix, axis=1), dataframe[last_ix]
-
     # select categorical and numerical features
     cat_ix = X.select_dtypes(include=['object', 'bool']).columns
     num_ix = X.select_dtypes(include=['int64', 'float64']).columns
@@ -60,7 +59,6 @@ def evaluate_model( X, y, model, kfold='false'):
         #     model = model['m']
         preds = model.predict(X_test)
         score = accuracy_score(y_test,preds)
-    
     else:
         k = 10
         print(f"Running {k}k-fold cross validation training.")
@@ -79,31 +77,30 @@ def get_models():
     models.append(DecisionTreeClassifier())
     names.append('CART')
     # SVM
-    # models.append(SVC(gamma='scale'))
-    # names.append('SVM')
+    models.append(SVC(gamma='scale'))
+    names.append('SVM')
 #     # Bagging
-#     models.append(BaggingClassifier(n_estimators=100))
-#     names.append('BAG')
-#     # RF
-#     models.append(MLPClassifier(max_iter=500))
-#     names.append('MLP')
+    # models.append(BaggingClassifier(n_estimators=100))
+    # names.append('BAG')
+    # RF
+    # models.append(MLPClassifier(max_iter=500))
+    # names.append('MLP')
 # # #     # GBM
-#     models.append(GradientBoostingClassifier(n_estimators=100))
-#     names.append('GBM')
+    models.append(GradientBoostingClassifier(n_estimators=100))
+    names.append('GBM')
     return models, names
 
-filen = 'adult_sanitized_0.2_sex'
-full_path = f'../focus_data/gansanitized/{filen}.csv'
+# filen = 'adult_sanitized_0.2_sex'
+# full_path = f'../focus_data/gansanitized/{filen}.csv'
 
-full_path = f"/home/jc/Desktop/udem_H20/thesis_research/fairness_evaluation/fairness_calculation_data/disp_impact_reduced.csv"
+full_path = f"/home/jc/Desktop/udem_H20/thesis_research/fairness_evaluation/fairness_calculation_data/disp_impact_compas_0-0.csv"
 
 X, y, cat_ix, num_ix, dataframe = load_dataset(full_path)
-
 # define models
 models, names = get_models()
 results = list()
 total_texts = []
-# evaluate each model
+# evaluate each model   
 
 for i in range(len(models)):
     # define steps
